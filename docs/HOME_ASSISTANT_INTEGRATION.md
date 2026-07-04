@@ -145,6 +145,44 @@ once, and we access HA itself remotely (Tailscale, Nabu Casa, etc.) over an
 ordinary unicast HTTPS connection. HA becomes the bridge between "local-only
 device" and "reachable from anywhere," which is the actual goal here.
 
+## 6. Other leads for the Econiq WiFi investigation
+
+Beyond straight packet capture (section 5), a few more angles to try, roughly
+cheapest/fastest first:
+
+- **Check whether the Econiq is a rebrand.** Confirmed precedent: Vent-Axia's
+  own bathroom extractor fans are OEM'd from the Swedish brand Pax —
+  [`eriknn/ha-pax_ble`](https://github.com/eriknn/ha-pax_ble) explicitly
+  documents "Vent-Axia Svara (same as the [Pax] Calima)" and "Vent-Axia
+  Svensa (same as [Pax] PureAir Sense)," same BLE protocol and all. Vent-Axia
+  is known to relabel other manufacturers' hardware for at least part of its
+  range, and its Dutch site calls the Econiq a generic "WTW-unit" (the
+  catch-all Dutch/Benelux term for MVHR). Worth checking a CE/compliance
+  label inside the unit or on the WiFi module for the real manufacturer name
+  — if it's a rebrand, a reverse-engineered protocol or HA integration may
+  already exist under a different brand name.
+- **Check whether the WiFi module is a Tuya-style module.** Many white-label
+  WiFi appliance modules in the EU are Tuya IoT modules with a documented
+  local-key protocol, for which a mature zero-cloud HACS integration already
+  exists (**LocalTuya**). Tell-tale sign: a "SmartLife"-style QR-code/AP-mode
+  pairing flow in the Connect app. If it matches, extracting the device's
+  `local_key` via the Tuya IoT developer console could be the fastest path
+  to a working integration — no protocol reverse-engineering needed at all.
+- **Decompile the Vent-Axia Connect APK** (`jadx`/`apktool`) and grep the
+  decompiled source/strings for URLs, ports, and SDK names (e.g. "tuya",
+  "esp32", vendor SDK identifiers) before doing any live packet capture —
+  static analysis is faster than sniffing and narrows down what to look for.
+- **Check the Play Store listing's declared permissions** for a quick, no-
+  decompile signal: "Nearby devices"/local network access and/or Bluetooth
+  and precise-location permissions indicate WiFi-local vs. BLE vs. both.
+- **Post findings to the community.** All existing Econiq HA discussion
+  covers the RS485/Modbus route only — nobody's publicly tackled the
+  WiFi/app side yet. Sharing a packet capture or APK findings on the HA
+  Community (e.g. as a follow-up on the
+  [Econiq Modbus/RS485 thread](https://community.home-assistant.io/t/vent-axia-sentinel-econiq-modbus-rs485-integration/993007))
+  is how the Kinetic wired-remote and Pax/Svara BLE protocols got cracked in
+  the first place — community reverse-engineering, not a lone effort.
+
 ## Recommendation
 
 - If the goal is to keep using/extending **this repo's simulator** (Kinetic
@@ -157,5 +195,6 @@ device" and "reachable from anywhere," which is the actual goal here.
   apply. Two live options: request the register map from Vent-Axia and use
   HA's stock Modbus integration over RS485 (route 4, works today); or, since
   our unit already has WiFi via the Connect app, investigate the local WiFi
-  API per section 5 — no wiring/case-opening required, but the protocol
-  isn't confirmed yet.
+  API per sections 5–6 — no wiring/case-opening required, but the protocol
+  isn't confirmed yet. Cheapest first steps: check the Play Store permissions
+  and whether pairing looks Tuya-like, before reaching for Wireshark.
