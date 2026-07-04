@@ -14,6 +14,7 @@ Which route applies depends on what interface your physical unit exposes:
 | A WiFi module (Sentinel Kinetic Advance S) | Local-network WiFi API | Existing HACS custom integration |
 | A BMS terminal (RS485/Modbus) — Kinetic Advance / ComAir HRUC-Plus 3 | Modbus RTU over TCP gateway | Existing HACS custom integration, most mature/complete |
 | Sentinel **Econiq** (Apex platform, RS485 or 868MHz RF) | Native Modbus RTU over RS485 + HA's built-in Modbus integration | Community guide, DIY register map from Vent-Axia support |
+| Sentinel **Econiq** with WiFi (Vent-Axia Connect app) | Local-only WiFi API (undocumented) | Unconfirmed — under investigation, see section 5 |
 
 Note: **Econiq is a different, newer product line from Kinetic** — it does
 not use the wired-remote protocol this repo simulates, so routes 1 and the
@@ -84,6 +85,66 @@ firmware/decoding to write.
   **Vent-Axia technical support**.
 - [Vent-Axia Sentinel Econiq – Modbus/RS485 integration guide](https://community.home-assistant.io/t/vent-axia-sentinel-econiq-modbus-rs485-integration/993007) — the community write-up of the above (HA Community "Community Guides" section; blocked from automated fetch by Cloudflare, but summarized here from search indexing — worth reading directly for the full register list).
 
+## 5. Econiq WiFi route (investigation in progress)
+
+Confirmed on our own unit: the Econiq's Vent-Axia Connect app can talk to it
+over **WiFi**, and this only works while the phone is on the same home WiFi
+— it stops working over a VPN (tested with Tailscale). That behaviour is a
+useful data point, not just an inconvenience:
+
+- **It means there's no cloud relay** — the app is doing local device
+  control, the same architecture as the Kinetic Advance S WiFi module
+  (`ventaxiaiot`: manual IP address + WiFi key + Device ID, no cloud
+  round-trip). The Econiq's WiFi and BLE both hang off the same Vent-Axia
+  Connect app, so the underlying local API is plausibly similar or shared,
+  but this is **not yet confirmed** — JosyBan/ventaxia_ha's docs only name
+  "Sentinel Kinetic Advance S" explicitly, not Econiq.
+- **Why the VPN breaks it**: the app almost certainly relies on local
+  discovery (mDNS/UDP broadcast) to find the unit, or the VPN client is
+  full-tunnelling all traffic off the LAN. Broadcast/multicast fundamentally
+  cannot cross a Layer-3 point-to-point overlay like Tailscale/WireGuard —
+  there's no shared broadcast domain to send it on. This is a long-standing,
+  still-open Tailscale feature request
+  ([tailscale/tailscale#1013](https://github.com/tailscale/tailscale/issues/1013),
+  [#11134](https://github.com/tailscale/tailscale/issues/11134)), not a bug
+  or a deliberate block, and it isn't specific to Vent-Axia — any mDNS-based
+  discovery protocol will fail the same way over Tailscale.
+- **What still works over Tailscale**: plain unicast IP. A
+  [subnet router](https://tailscale.com/docs/features/subnet-routers)
+  advertising the home LAN gets you a routable path to the unit's specific
+  IP:port — only the *discovery* step is broken, not connectivity once the
+  IP is known.
+
+### Next steps to pin down the protocol
+
+1. **Find the unit's LAN IP once** (router DHCP leases, or the Connect app's
+   device info screen) and see if the app/API works when addressed directly
+   by IP instead of via discovery — mirrors how `ventaxiaiot` already avoids
+   discovery entirely by requiring a manual IP.
+2. **Passive packet capture** of the Connect app talking to the unit while
+   both are on the home WiFi (Wireshark on a mirrored/monitor port, or
+   PCAPdroid on Android — no root needed) to identify the transport
+   (HTTP/UDP/TCP), port, and payload format. Zero risk to the unit — this is
+   just sniffing our own WiFi traffic, not touching the device.
+3. If the payload structure matches `ventaxiaiot`'s scheme, try pointing
+   JosyBan/ventaxia_ha at the Econiq's IP/key/device-ID directly, or open an
+   issue/PR asking about Econiq support.
+4. If mDNS discovery turns out to be load-bearing and can't be dropped,
+   workarounds (roughly in order of how much complexity they add) are: an
+   mDNS reflector (`avahi-daemon` reflector mode / `mdns-repeater`) running
+   on a LAN box that's also in the tailnet, or swapping Tailscale for
+   ZeroTier for this link specifically (ZeroTier is Layer 2 and does forward
+   multicast/mDNS/broadcast, unlike Tailscale).
+
+### Practical implication
+
+Once the Econiq's data is flowing into Home Assistant (which lives
+permanently on the home LAN), the "must be on the same WiFi" constraint
+stops being a problem for *us* — HA does the local discovery/connection
+once, and we access HA itself remotely (Tailscale, Nabu Casa, etc.) over an
+ordinary unicast HTTPS connection. HA becomes the bridge between "local-only
+device" and "reachable from anywhere," which is the actual goal here.
+
 ## Recommendation
 
 - If the goal is to keep using/extending **this repo's simulator** (Kinetic
@@ -93,5 +154,8 @@ firmware/decoding to write.
   port fitted, routes 2 or 3 are turnkey (no custom firmware/wiring) and more
   mature — prefer them over DIY UART sniffing.
 - If the unit is actually a **Sentinel Econiq**, this repo's simulator doesn't
-  apply — go straight to route 4 (request the register map from Vent-Axia,
-  then use HA's stock Modbus integration).
+  apply. Two live options: request the register map from Vent-Axia and use
+  HA's stock Modbus integration over RS485 (route 4, works today); or, since
+  our unit already has WiFi via the Connect app, investigate the local WiFi
+  API per section 5 — no wiring/case-opening required, but the protocol
+  isn't confirmed yet.
