@@ -175,6 +175,30 @@ cheapest/fastest first:
 - **Check the Play Store listing's declared permissions** for a quick, no-
   decompile signal: "Nearby devices"/local network access and/or Bluetooth
   and precise-location permissions indicate WiFi-local vs. BLE vs. both.
+
+### What's been tried already (and what actually needs doing locally)
+
+From this dev environment: `unzip`/`curl`/`strings`/`grep` are available for
+static APK analysis, but the environment's outbound network policy blocks
+APK-mirror hosts outright (`apkpure.com` and its CDN both 403 at the proxy —
+"policy denial," not a bug), and the Play Store / Vent-Axia Connect listing
+pages 403 from bot protection regardless. So APK acquisition and live
+Play Store scraping can't happen from here — they need to happen on a
+real device:
+
+1. **Pull the APK off your own phone**: an "APK Extractor" app (no root), or
+   `adb pull $(adb shell pm path uk.ventaxia.connect | cut -d: -f2)` from a
+   laptop with the phone on USB. Sharing the resulting `.apk` file is enough
+   to grep it here for hostnames/ports/SDK names without a full `jadx`
+   decompile.
+2. **Or just read the permissions locally**: Android Settings → Apps →
+   Vent-Axia Connect → Permissions — answers WiFi-local vs. BLE vs. both in
+   seconds, no APK needed.
+3. **Or go straight to a packet capture** (PCAPdroid, section 5) — most
+   direct route to the actual protocol.
+
+Whichever of the three produces a file/output, that's the next concrete
+input this investigation needs.
 - **Post findings to the community.** All existing Econiq HA discussion
   covers the RS485/Modbus route only — nobody's publicly tackled the
   WiFi/app side yet. Sharing a packet capture or APK findings on the HA
