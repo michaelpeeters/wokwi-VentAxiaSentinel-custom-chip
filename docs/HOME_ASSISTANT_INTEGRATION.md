@@ -10,9 +10,14 @@ Which route applies depends on what interface your physical unit exposes:
 
 | Your unit has... | Route | Status |
 | --- | --- | --- |
-| Only the wired remote / display port (RS232, 9600 8N1) | ESPHome external component | Community project, active development |
+| Only the wired remote / display port (RS232, 9600 8N1) — Kinetic | ESPHome external component | Community project, active development |
 | A WiFi module (Sentinel Kinetic Advance S) | Local-network WiFi API | Existing HACS custom integration |
-| A BMS terminal (RS485/Modbus) | Modbus RTU over TCP gateway | Existing HACS custom integration, most mature/complete |
+| A BMS terminal (RS485/Modbus) — Kinetic Advance / ComAir HRUC-Plus 3 | Modbus RTU over TCP gateway | Existing HACS custom integration, most mature/complete |
+| Sentinel **Econiq** (Apex platform, RS485 or 868MHz RF) | Native Modbus RTU over RS485 + HA's built-in Modbus integration | Community guide, DIY register map from Vent-Axia support |
+
+Note: **Econiq is a different, newer product line from Kinetic** — it does
+not use the wired-remote protocol this repo simulates, so routes 1 and the
+Kinetic-specific Modbus repo below don't apply to it. See section 4.
 
 ## 1. Wired remote / UART route (matches this simulator)
 
@@ -58,13 +63,35 @@ directly over the local network.
 Units with a BMS terminal block (RS485) can be bridged to Home Assistant via
 a Modbus RTU↔TCP gateway — no microcontroller/firmware needed at all.
 
-- [Koky05/comair-modbus-homeassistant](https://github.com/Koky05/comair-modbus-homeassistant) — HACS integration for ComAir HRUC-Plus 3 / Vent-Axia Sentinel Kinetic Advance MVHR via Modbus RTU over TCP. Uses an Elfin EW11A RS485→TCP gateway wired to the unit's BMS connector (RJ12, powered off the unit itself). Exposes ~38 entities: temps, humidity, CO2, fan RPM, power/energy, a full `climate` entity with presets, mode `select`, and BMS override `switch`es. This is the most feature-complete of the three options, but only applies if your unit has the BMS interface enabled/wired out.
-- [Vent-Axia Sentinel Econiq Modbus/RS485 integration guide](https://community.home-assistant.io/t/vent-axia-sentinel-econiq-modbus-rs485-integration/993007) — same approach for the Econiq range.
+- [Koky05/comair-modbus-homeassistant](https://github.com/Koky05/comair-modbus-homeassistant) — HACS integration for ComAir HRUC-Plus 3 / Vent-Axia Sentinel **Kinetic Advance** MVHR via Modbus RTU over TCP. Uses an Elfin EW11A RS485→TCP gateway wired to the unit's BMS connector (RJ12, powered off the unit itself). Exposes ~38 entities: temps, humidity, CO2, fan RPM, power/energy, a full `climate` entity with presets, mode `select`, and BMS override `switch`es. This is the most feature-complete of the three Kinetic options, but only applies to Kinetic Advance units with the BMS interface enabled/wired out — it does not target Econiq.
+
+## 4. Sentinel Econiq route (separate product line, not this repo's protocol)
+
+The **Econiq** (built on Vent-Axia's newer "Apex" platform) is a different
+unit from the Kinetic this repo simulates. It doesn't speak the wired-remote
+display protocol at all — instead it exposes **native Modbus RTU** over its
+BMS RS485 terminal (or an optional 868MHz RF link), so there's no custom
+firmware/decoding to write.
+
+- Enable RS485/Modbus comms mode and set the unit's Modbus address first via
+  the **Vent-Axia Connect** app.
+- Wire a standard RS485↔TCP or RS485↔USB gateway to the BMS terminal, then
+  use Home Assistant's built-in **Modbus integration** (`modbus:` in
+  `configuration.yaml`) directly — no custom component needed.
+- The register map and comms parameters (baud rate, parity, holding/input
+  register addresses) are **not publicly published** by Vent-Axia; the
+  approach used in the community guide was to request them directly from
+  **Vent-Axia technical support**.
+- [Vent-Axia Sentinel Econiq – Modbus/RS485 integration guide](https://community.home-assistant.io/t/vent-axia-sentinel-econiq-modbus-rs485-integration/993007) — the community write-up of the above (HA Community "Community Guides" section; blocked from automated fetch by Cloudflare, but summarized here from search indexing — worth reading directly for the full register list).
 
 ## Recommendation
 
-- If the goal is to keep using/extending **this repo's simulator**, target
-  the ESPHome external component (route 1) — same protocol, same packets.
-- If the physical unit already has a WiFi module or BMS/Modbus port fitted,
-  routes 2 or 3 are turnkey (no custom firmware/wiring) and more mature —
-  prefer them over DIY UART sniffing.
+- If the goal is to keep using/extending **this repo's simulator** (Kinetic
+  wired-remote protocol), target the ESPHome external component (route 1) —
+  same protocol, same packets.
+- If the physical unit already has a WiFi module or Kinetic Advance BMS/Modbus
+  port fitted, routes 2 or 3 are turnkey (no custom firmware/wiring) and more
+  mature — prefer them over DIY UART sniffing.
+- If the unit is actually a **Sentinel Econiq**, this repo's simulator doesn't
+  apply — go straight to route 4 (request the register map from Vent-Axia,
+  then use HA's stock Modbus integration).
